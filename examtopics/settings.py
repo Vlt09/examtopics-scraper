@@ -1,10 +1,15 @@
 BASE_URL = "https://www.examtopics.com"
 
 DEFAULT_TIMEOUT_MS = 45_000
-DEFAULT_RETRIES = 3
+DEFAULT_RETRIES = 6
 DEFAULT_DELAY_RANGE = (3.0, 6.0)
 MAX_HTTP_POOL_SIZE = 64
-DEFAULT_REQUEST_WORKERS = MAX_HTTP_POOL_SIZE
+# ExamTopics answers "429 Too Many Requests" when hit by many parallel
+# requests, so keep concurrency low and space requests out.
+DEFAULT_REQUEST_WORKERS = 4
+MIN_REQUEST_INTERVAL_SECONDS = 1.5   # minimum gap between two requests (all threads)
+RATE_LIMIT_BACKOFF_SECONDS = 15.0    # first wait after a 429, doubled each time
+RATE_LIMIT_MAX_BACKOFF_SECONDS = 180.0
 DEFAULT_CLEAN_WORKERS = 4
 DEFAULT_CACHE_DIR = ".examtopics_cache"
 DEFAULT_CACHE_TTL_SECONDS = 6 * 60 * 60
