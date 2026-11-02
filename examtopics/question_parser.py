@@ -2,12 +2,32 @@
 import re
 from html import unescape
 from typing import Dict, List, Optional
+from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
+
+from .settings import BASE_URL
 
 
 def _clean(text: str) -> str:
     return re.sub(r"\s+", " ", (text or "").replace("\xa0", " ")).strip()
+
+
+def _image_urls(element, page_url: str) -> List[str]:
+    """Return the absolute URLs of every <img> inside `element`, in order, deduplicated."""
+    if element is None:
+        return []
+    base = page_url or BASE_URL
+    urls: List[str] = []
+    for img in element.find_all("img"):
+        src = img.get("src") or img.get("data-src") or img.get("data-original") or ""
+        src = unescape(src).strip()
+        if not src or src.startswith("data:"):
+            continue
+        absolute = urljoin(base, src)
+        if absolute not in urls:
+            urls.append(absolute)
+    return urls
 
 
 def parse_question_page(html: str, url: str = "") -> Dict:
@@ -18,6 +38,8 @@ def parse_question_page(html: str, url: str = "") -> Dict:
         "question_no": str,          # e.g. "Topic 1 / Question 23"
         "question": str,             # question text only, options stripped out
         "options": {"A": "...", "B": "...", ...},
+        "images": [str, ...],        # absolute URLs of images in the question body
+        "answer_images": [str, ...], # absolute URLs of images in the suggested answer
         "most_voted": str,           # e.g. "B"
         "vote_counts": {"A": 5, "B": 12, ...},
         "community_answer": str,     # most_voted letter + text
@@ -49,6 +71,12 @@ def parse_question_page(html: str, url: str = "") -> Dict:
             ".answer, .options, .vote-button, .answer-vote-button"
         ):
             junk.decompose()
+        # Collect question images (exhibits, diagrams, hotspot/drag-drop
+        # screenshots) without the ones belonging to the suggested answer.
+        images_copy = BeautifulSoup(str(q_body_copy), "html.parser")
+        for answer_el in images_copy.select(".question-answer, .correct-answer, .answer-description"):
+            answer_el.decompose()
+        result["images"] = _image_urls(images_copy, url)
         question_text = _clean(q_body_copy.get_text(" "))
         # Strip trailing site boilerplate button text that leaks in
         # regardless of which element it's actually wrapped in.
@@ -56,6 +84,15 @@ def parse_question_page(html: str, url: str = "") -> Dict:
         result["question"] = question_text
     else:
         result["question"] = ""
+        result["images"] = []
+
+    # ── Suggested-answer images (hotspot / drag-and-drop answers) ─────
+    answer_images: List[str] = []
+    for answer_el in soup.select(".correct-answer, .answer-description"):
+        for img_url in _image_urls(answer_el, url):
+            if img_url not in answer_images:
+                answer_images.append(img_url)
+    result["answer_images"] = answer_images
 
     # ── Options ───────────────────────────────────────────────────────
     options: Dict[str, str] = {}
@@ -66,6 +103,8 @@ def parse_question_page(html: str, url: str = "") -> Dict:
             letter = _clean(letter_el.get_text()).strip(".")
             letter_el.decompose()
             text = _clean(li.get_text(" "))
+            for img_url in _image_urls(li, url):
+                text = f"{text} [Image: {img_url}]".strip()
             options[letter] = text
     # Strategy 2: fallback — lines starting with A. B. C. D. inside question card
     if not options:

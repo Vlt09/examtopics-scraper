@@ -37,6 +37,13 @@ def format_question(q: Dict, index: int) -> str:
     lines.append(f"Question:\n{q.get('question', '(not found)')}")
     lines.append("")
 
+    images = q.get("images", [])
+    if images:
+        lines.append("Images:")
+        for img_url in images:
+            lines.append(f"  - {img_url}")
+        lines.append("")
+
     options = q.get("options", {})
     if options:
         lines.append("Options:")
@@ -55,6 +62,13 @@ def format_question(q: Dict, index: int) -> str:
     community_answer = q.get("community_answer", "")
     if community_answer:
         lines.append(f"Most Accepted Answer:\n  {community_answer}")
+        lines.append("")
+
+    answer_images = q.get("answer_images", [])
+    if answer_images:
+        lines.append("Suggested Answer Images:")
+        for img_url in answer_images:
+            lines.append(f"  - {img_url}")
         lines.append("")
 
     discussion = q.get("discussion", [])
